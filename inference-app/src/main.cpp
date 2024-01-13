@@ -21,18 +21,19 @@ extern "C" {
 
 // constants
 #define SAMPLE_RATE       16000
-#define FFT_SIZE          256
+#define FFT_SIZE          512
 #define SPECTRUM_SHIFT    4
 #define INPUT_BUFFER_SIZE ((FFT_SIZE / 2) * SPECTRUM_SHIFT)
 #define INPUT_SHIFT       0
+#define TENSOR_ARENA_SIZE 190000
 
 // microphone configuration
 const struct pdm_microphone_config pdm_config = {
     // GPIO pin for the PDM DAT signal
-    .gpio_data = 2,
+    .gpio_data = 22,
 
     // GPIO pin for the PDM CLK signal
-    .gpio_clk = 3,
+    .gpio_clk = 23,
 
     // PIO instance to use
     .pio = pio0,
@@ -53,7 +54,7 @@ volatile int new_samples_captured = 0;
 q15_t input_q15[INPUT_BUFFER_SIZE + (FFT_SIZE / 2)];
 
 DSPPipeline dsp_pipeline(FFT_SIZE);
-MLModel ml_model(tflite_model, 128 * 1024);
+MLModel ml_model(tflite_model, TENSOR_ARENA_SIZE);
 
 int8_t* scaled_spectrum = nullptr;
 int32_t spectogram_divider;
@@ -66,18 +67,7 @@ int main( void )
     // initialize stdio
     stdio_init_all();
 
-    printf("hello pico fire alarm detection\n");
-
-    gpio_set_function(PICO_DEFAULT_LED_PIN, GPIO_FUNC_PWM);
-    
-    uint pwm_slice_num = pwm_gpio_to_slice_num(PICO_DEFAULT_LED_PIN);
-    uint pwm_chan_num = pwm_gpio_to_channel(PICO_DEFAULT_LED_PIN);
-
-    // Set period of 256 cycles (0 to 255 inclusive)
-    pwm_set_wrap(pwm_slice_num, 256);
-
-    // Set the PWM running
-    pwm_set_enabled(pwm_slice_num, true);
+    printf("Start of main...\n");
 
     if (!ml_model.init()) {
         printf("Failed to initialize ML model!\n");
@@ -93,55 +83,57 @@ int main( void )
     spectogram_divider = 64 * ml_model.input_scale(); 
     spectrogram_zero_point = ml_model.input_zero_point();
 
-    // initialize the PDM microphone
-    if (pdm_microphone_init(&pdm_config) < 0) {
-        printf("PDM microphone initialization failed!\n");
-        while (1) { tight_loop_contents(); }
-    }
+    // // initialize the PDM microphone
+    // if (pdm_microphone_init(&pdm_config) < 0) {
+    //     printf("PDM microphone initialization failed!\n");
+    //     while (1) { tight_loop_contents(); }
+    // }
 
-    // set callback that is called when all the samples in the library
-    // internal sample buffer are ready for reading
-    pdm_microphone_set_samples_ready_handler(on_pdm_samples_ready);
+    // // set callback that is called when all the samples in the library
+    // // internal sample buffer are ready for reading
+    // pdm_microphone_set_samples_ready_handler(on_pdm_samples_ready);
 
-    // start capturing data from the PDM microphone
-    if (pdm_microphone_start() < 0) {
-        printf("PDM microphone start failed!\n");
-        while (1) { tight_loop_contents(); }
-    }
+    // // start capturing data from the PDM microphone
+    // if (pdm_microphone_start() < 0) {
+    //     printf("PDM microphone start failed!\n");
+    //     while (1) { tight_loop_contents(); }
+    // }
 
-    while (1) {
-        // wait for new samples
-        while (new_samples_captured == 0) {
-            tight_loop_contents();
-        }
-        new_samples_captured = 0;
+    // while (1) {
+    //     // wait for new samples
+    //     while (new_samples_captured == 0) {
+    //         tight_loop_contents();
+    //     }
+    //     new_samples_captured = 0;
 
-        dsp_pipeline.shift_spectrogram(scaled_spectrum, SPECTRUM_SHIFT, 124);
+    //     dsp_pipeline.shift_spectrogram(scaled_spectrum, SPECTRUM_SHIFT, 124);
 
-        // move input buffer values over by INPUT_BUFFER_SIZE samples
-        memmove(input_q15, &input_q15[INPUT_BUFFER_SIZE], (FFT_SIZE / 2));
+    //     // move input buffer values over by INPUT_BUFFER_SIZE samples
+    //     memmove(input_q15, &input_q15[INPUT_BUFFER_SIZE], (FFT_SIZE / 2));
 
-        // copy new samples to end of the input buffer with a bit shift of INPUT_SHIFT
-        arm_shift_q15(capture_buffer_q15, INPUT_SHIFT, input_q15 + (FFT_SIZE / 2), INPUT_BUFFER_SIZE);
+    //     // copy new samples to end of the input buffer with a bit shift of INPUT_SHIFT
+    //     arm_shift_q15(capture_buffer_q15, INPUT_SHIFT, input_q15 + (FFT_SIZE / 2), INPUT_BUFFER_SIZE);
     
-        for (int i = 0; i < SPECTRUM_SHIFT; i++) {
-            dsp_pipeline.calculate_spectrum(
-                input_q15 + i * ((FFT_SIZE / 2)),
-                scaled_spectrum + (129 * (124 - SPECTRUM_SHIFT + i)),
-                spectogram_divider, spectrogram_zero_point
-            );
-        }
+    //     for (int i = 0; i < SPECTRUM_SHIFT; i++) {
+    //         dsp_pipeline.calculate_spectrum(
+    //             input_q15 + i * ((FFT_SIZE / 2)),
+    //             scaled_spectrum + (129 * (124 - SPECTRUM_SHIFT + i)),
+    //             spectogram_divider, spectrogram_zero_point
+    //         );
+    //     }
 
         float prediction = ml_model.predict();
 
-        if (prediction >= 0.5) {
-          printf("\t🔥 🔔\tdetected!\t(prediction = %f)\n\n", prediction);
-        } else {
-          printf("\t🔕\tNOT detected\t(prediction = %f)\n\n", prediction);
-        }
+        printf("Ran ML model\n");
 
-        pwm_set_chan_level(pwm_slice_num, pwm_chan_num, prediction * 255);
-    }
+        // if (prediction >= 0.5) {
+        //   printf("\t🔥 🔔\tdetected!\t(prediction = %f)\n\n", prediction);
+        // } else {
+        //   printf("\t🔕\tNOT detected\t(prediction = %f)\n\n", prediction);
+        // }
+
+    //     pwm_set_chan_level(pwm_slice_num, pwm_chan_num, prediction * 255);
+    // }
 
     return 0;
 }
