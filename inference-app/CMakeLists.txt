@@ -31,15 +31,12 @@ add_subdirectory(${DSP}/Source EXCLUDE_FROM_ALL)
 # rest of your project
 add_executable(pico_inference_app
     ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/dsp_pipeline.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ml_model.cpp
 )
 
 target_link_libraries(pico_inference_app
     pico_stdlib
-    hardware_pwm
     pico-tflmicro
-    pico_pdm_microphone
     CMSISDSPTransform CMSISDSPSupport CMSISDSPCommon CMSISDSPComplexMath CMSISDSPFastMath CMSISDSPBasicMath
 )
 
@@ -50,5 +47,4 @@ pico_enable_stdio_uart(pico_inference_app 0)
 # create map/bin/hex/uf2 file in addition to ELF.
 pico_add_extra_outputs(pico_inference_app)
 
-add_subdirectory("lib/microphone-library-for-pico" EXCLUDE_FROM_ALL)
 add_subdirectory("lib/pico-tflmicro" EXCLUDE_FROM_ALL)
